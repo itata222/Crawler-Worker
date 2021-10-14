@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node ./src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": ".\\node_modules\\.bin\\env-cmd -f .\\config\\dev.env nodemon .\\server\\index.js"
+    "dev": ".\\node_modules\\.bin\\env-cmd -f .\\config\\dev.env nodemon .\\src\\index.js"
   },
   "author": "",
   "license": "ISC",
@@ -16,7 +17,8 @@
     "cheerio": "^1.0.0-rc.10",
     "cors": "^2.8.5",
     "express": "^4.17.1",
-    "redis": "^3.1.2"
+    "redis": "^3.1.2",
+    "request": "^2.88.2"
   },
   "devDependencies": {
     "env-cmd": "^10.1.0",
