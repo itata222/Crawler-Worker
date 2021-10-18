@@ -1,12 +1,11 @@
 const redisClient = require('../db/redis');
 
-const isUrlExistInRedis=(async({currentUrl,rootUrl})=>{
+const isUrlExistInRedis=(async({currentUrl,rootUrl,parentAddress})=>{
     let isExist,response;
     try {     
-        response=await redisClient.keysAsync(`${rootUrl}$$$${currentUrl}`);
-        let response2=await redisClient.keysAsync(`*`);
+        response=await redisClient.keysAsync(`${rootUrl}$${currentUrl}$*`);
         (response==null||response?.length===0)?isExist=false:isExist=true;
-        console.log(response,response2)
+        console.log(isExist)
         return isExist
     } catch (e) {
         console.log(e)
@@ -16,7 +15,15 @@ const isUrlExistInRedis=(async({currentUrl,rootUrl})=>{
 const getCurrentLevelData=(async()=>{
     try {        
         const response=await redisClient.hgetallAsync('levelData');
- 
+        return response;
+    } catch (e) {
+        console.log(e)
+        return e;
+    }
+})
+const getWorkDictData=(async()=>{
+    try {        
+        const response=await redisClient.hgetallAsync('workDict');
         return response;
     } catch (e) {
         console.log(e)
@@ -31,9 +38,19 @@ const incrementUrlsInCurrentLevelScannedData=(async()=>{
         return e;
     }
 })
-const setUrlsInCurrentLevelToScanData=(async(childsUrl)=>{
+const addUrlsToCurrentLevelToScanData=(async(childsUrlLength)=>{
     try {        
-        const response=await redisClient.hsetAsync('levelData','urlsInCurrentLevelToScan',parseInt(childsUrl)) 
+        const levelData=await redisClient.hgetallAsync('levelData');
+        const childsSum=levelData.urlsInCurrentLevelToScan+childsUrlLength
+        const response=await redisClient.hsetAsync('levelData','urlsInCurrentLevelToScan',childsSum) 
+        return response;
+    } catch (e) {
+        return e;
+    }
+})
+const setNewUrlsToCurrentLevelToScanData=(async()=>{
+    try {        
+        const response=await redisClient.hsetAsync('levelData','urlsInCurrentLevelToScan',0) 
         return response;
     } catch (e) {
         return e;
@@ -42,21 +59,31 @@ const setUrlsInCurrentLevelToScanData=(async(childsUrl)=>{
 const incrementLevelData=(async()=>{
     try {        
         const response=await redisClient.hincrbyAsync('levelData','currentLevel',1)   
+        await redisClient.hsetAsync('levelData','urlsInCurrentLevelToScan',0) 
+        await redisClient.hsetAsync('levelData','urlsInCurrentLevelAlreadyScanned',0) 
         return response;
     } catch (e) {
         return e;
     }
 })
-
-const saveUrlInRedis=async({parentAddress,myAddress,depth,rootUrl})=>{
+const incrementTotalUrlsData=(async()=>{
+    try {        
+        const response=await redisClient.hincrbyAsync('workDict','totalUrls',1)   
+        return response;
+    } catch (e) {
+        return e;
+    }
+})
+const saveUrlInRedis=async({parentAddress,myAddress,depth,rootUrl,position,childrenUrls})=>{
     let address=myAddress;
     try {     
         if(myAddress!=undefined&&!myAddress.includes('http'))
             address=myAddress.substring(1)
-        const urlObj={parentAddress,myAddress:address,depth,rootUrl}
+        const childrenUrlsStr=JSON.stringify(childrenUrls)
+        const urlObj={parentAddress,myAddress:address,depth,rootUrl,position,childrenUrlsStr}
         const urlStr=JSON.stringify(urlObj)
 
-        await redisClient.setexAsync(`${rootUrl}$$$${address}` , 3600 , urlStr);
+        await redisClient.setexAsync(`${rootUrl}$${address}$${parentAddress}` , 3600 , urlStr);
 
     } catch (e) {
         return e;
@@ -82,6 +109,9 @@ module.exports={
     saveUrlInRedis,
     incrementLevelData,
     setWorkAsDoneInRedis,
-    setUrlsInCurrentLevelToScanData,
-    incrementUrlsInCurrentLevelScannedData
+    addUrlsToCurrentLevelToScanData,
+    setNewUrlsToCurrentLevelToScanData,
+    incrementUrlsInCurrentLevelScannedData,
+    getWorkDictData,
+    incrementTotalUrlsData
 }

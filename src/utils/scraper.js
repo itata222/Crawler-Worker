@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const parseUrl = async (url) => {
+const scrapeUrl = async (url) => {
     try {
         const urls = []
         const res = await axios.get(url)
@@ -18,5 +18,5 @@ const parseUrl = async (url) => {
 }
 
 module.exports = {
-    parseUrl
+    scrapeUrl
 }

@@ -6,17 +6,17 @@ const sqs = new AWS.SQS({
 });
 
 
-const sendMessageToQueue = async ({url,rootUrl,QueueUrl}) => {
+const sendMessageToQueue = async ({url,rootUrl,QueueUrl,parentUrl}) => {
     console.log(url)
 
     try {
         let MessageBody;
         if(!url?.includes('http')){
             url=url.substring(1)
-            MessageBody = `${rootUrl}$$$${rootUrl+url}`;
+            MessageBody = `${rootUrl}$${rootUrl+url}$${parentUrl}`;
         }
         else
-            MessageBody = `${rootUrl}$$$${url}`;
+            MessageBody = `${rootUrl}$${url}$${parentUrl}`;
         const {MessageId} = await sqs.sendMessage({
             QueueUrl,
             MessageBody
@@ -36,7 +36,7 @@ const pollMessageFromQueue = async ({QueueName,rootUrl}) => {
             QueueUrl,
             MaxNumberOfMessages: 1,
             MessageAttributeNames: [
-                `${rootUrl}$$$*`
+                `${rootUrl}$*`
             ],
             VisibilityTimeout: 30,
             WaitTimeSeconds: 10
@@ -50,14 +50,14 @@ const pollMessageFromQueue = async ({QueueName,rootUrl}) => {
 
 const deleteMessagesFromQueue=async({Messages,QueueUrl})=>{
     if (Messages) {
-        const messagesDeleteFuncs = Messages.map(message => {
+        const messagesDeleteFuncs = Messages.map(async(message) => {
             return sqs.deleteMessage({
                 QueueUrl,
                 ReceiptHandle: message.ReceiptHandle
             }).promise();
         });
         
-        Promise.allSettled(messagesDeleteFuncs)
+        await Promise.allSettled(messagesDeleteFuncs)
         .then(data => console.log('deleteMessageFromQueue',data));
     }
 };
