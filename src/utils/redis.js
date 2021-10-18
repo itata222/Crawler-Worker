@@ -1,11 +1,12 @@
 const redisClient = require('../db/redis');
 
-const isUrlExistInRedis=(async({currentUrl})=>{
-    let isExist;
-    try {        
-        const response=await redisClient.getAsync(currentUrl);
-        response==null?isExist=false:isExist=true;
-            
+const isUrlExistInRedis=(async({currentUrl,rootUrl})=>{
+    let isExist,response;
+    try {     
+        response=await redisClient.keysAsync(`${rootUrl}$$$${currentUrl}`);
+        let response2=await redisClient.keysAsync(`*`);
+        (response==null||response?.length===0)?isExist=false:isExist=true;
+        console.log(response,response2)
         return isExist
     } catch (e) {
         console.log(e)
@@ -22,41 +23,42 @@ const getCurrentLevelData=(async()=>{
         return e;
     }
 })
-const incrementChildsData=(async()=>{
-
+const incrementUrlsInCurrentLevelScannedData=(async()=>{
     try {        
-        const response=await redisClient.hincrbyAsync('levelData','childs',1)
-            
+        const response=await redisClient.hincrbyAsync('levelData','urlsInCurrentLevelAlreadyScanned',1) 
         return response;
     } catch (e) {
-        console.log(e)
+        return e;
+    }
+})
+const setUrlsInCurrentLevelToScanData=(async(childsUrl)=>{
+    try {        
+        const response=await redisClient.hsetAsync('levelData','urlsInCurrentLevelToScan',parseInt(childsUrl)) 
+        return response;
+    } catch (e) {
         return e;
     }
 })
 const incrementLevelData=(async()=>{
-
     try {        
-        const response=await redisClient.hincrbyAsync('levelData','level',1)
-            
+        const response=await redisClient.hincrbyAsync('levelData','currentLevel',1)   
         return response;
     } catch (e) {
-        console.log(e)
         return e;
     }
 })
 
 const saveUrlInRedis=async({parentAddress,myAddress,depth,rootUrl})=>{
     let address=myAddress;
-    if(!myAddress.includes('http'))
-        address=myAddress.substring(1)
+    try {     
+        if(myAddress!=undefined&&!myAddress.includes('http'))
+            address=myAddress.substring(1)
+        const urlObj={parentAddress,myAddress:address,depth,rootUrl}
+        const urlStr=JSON.stringify(urlObj)
 
-    const urlObj={parentAddress,myAddress:address,depth,rootUrl}
-    const urlStr=JSON.stringify(urlObj)
-    try {        
         await redisClient.setexAsync(`${rootUrl}$$$${address}` , 3600 , urlStr);
 
     } catch (e) {
-        console.log(e)
         return e;
     }
 }
@@ -80,5 +82,6 @@ module.exports={
     saveUrlInRedis,
     incrementLevelData,
     setWorkAsDoneInRedis,
-    incrementChildsData
+    setUrlsInCurrentLevelToScanData,
+    incrementUrlsInCurrentLevelScannedData
 }

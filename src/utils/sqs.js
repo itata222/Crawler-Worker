@@ -7,15 +7,16 @@ const sqs = new AWS.SQS({
 
 
 const sendMessageToQueue = async ({url,rootUrl,QueueUrl}) => {
-    let MessageBody;
-    if(!url.includes('http')){
-        url=url.substring(1)
-        MessageBody = `${rootUrl}$$$${rootUrl+url}`;
-    }
-    else
-        MessageBody = `${rootUrl}$$$${url}`;
-        
+    console.log(url)
+
     try {
+        let MessageBody;
+        if(!url?.includes('http')){
+            url=url.substring(1)
+            MessageBody = `${rootUrl}$$$${rootUrl+url}`;
+        }
+        else
+            MessageBody = `${rootUrl}$$$${url}`;
         const {MessageId} = await sqs.sendMessage({
             QueueUrl,
             MessageBody
@@ -57,7 +58,7 @@ const deleteMessagesFromQueue=async({Messages,QueueUrl})=>{
         });
         
         Promise.allSettled(messagesDeleteFuncs)
-        .then(data => console.log(data));
+        .then(data => console.log('deleteMessageFromQueue',data));
     }
 };
 

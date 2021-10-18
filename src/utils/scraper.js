@@ -10,7 +10,6 @@ const parseUrl = async (url) => {
         $(links).each(function (i, link) {
             urls.push($(link).attr('href'))
         });
-        console.log(urls.length)
         return new Promise((resolve, reject) => { resolve(urls) });
     } catch (e) {
         return new Promise((resolve, reject) => { reject(undefined) });
