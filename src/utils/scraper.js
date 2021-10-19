@@ -1,22 +1,39 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 const scrapeUrl = async (url) => {
-    try {
-        const urls = []
-        const res = await axios.get(url)
-        const $ = cheerio.load(res.data);
-        const links = $('a'); //jquery get all hyperlinks
-        $(links).each(function (i, link) {
-            urls.push($(link).attr('href'))
-        });
-        return new Promise((resolve, reject) => { resolve(urls) });
-    } catch (e) {
-        return new Promise((resolve, reject) => { reject(undefined) });
+  console.log("url", url);
+  try {
+    const urlResponse = await axios.get(url);
+    const $ = cheerio.load(urlResponse.data);
+    const links = [];
+    $("a").each((i, el) => {
+      const link = getFullUrl($(el).attr("href"));
+      if (isLinkValid(link)) links.push(link);
+    });
+    return links;
+  } catch (err) {
+    console.log("scraper error", err.response);
+    return;
+  }
+};
+
+const getFullUrl = (url) => {
+  try {
+    if (url.includes("http")) {
+      return url;
+    } else {
+      return `http://${url}`;
     }
-    
-}
+  } catch (e) {
+    return;
+  }
+};
+const isLinkValid = (url) => {
+  const urlRegex = /^(?:http(s)?:\/\/)?[\w.-]+(?:\.[\w\.-]+)+[\w\-\._~:/?#[\]@!\$&'\(\)\*\+,;=.]+$/;
+  return urlRegex.test(url);
+};
 
 module.exports = {
-    scrapeUrl
-}
+  scrapeUrl,
+};
