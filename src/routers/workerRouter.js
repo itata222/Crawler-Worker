@@ -10,6 +10,7 @@ const {
   getWorkDictData,
   incrementTotalUrlsData,
   addUrlsToNextLevelToScanData,
+  incrementDeathEndsData,
 } = require("../utils/redis");
 const { scrapeUrl } = require("../utils/scraper");
 
@@ -71,11 +72,16 @@ router.post("/crawl", async (req, res) => {
     if (urlFromRedis != null) {
       const responseObj = JSON.parse(urlFromRedis);
       console.log("exist", responseObj);
-      if (responseObj.workID === workID) {
-        await incrementDeathEndsData();
+      if (parseInt(responseObj.workID) === workID) await incrementDeathEndsData();
+      else {
+        // ! this is the last part i need to finish. when its not the current crawler that want the data. basically it need to do all the things that happens when it not existing
+        const existingKeyChildrens = JSON.parse(responseObj.childrenUrlsStr);
+        for (let i = 0; i < existingKeyChildrens.length; i++) {
+          await incrementTotalUrlsData();
+          await addUrlsToNextLevelToScanData(existingKeyChildrens.length);
+          levelUrls.push({ url: existingKeyChildrens[i], parent: responseObj.myAddress });
+        }
       }
-      //levelUrls.push({ url: childrenUrlsArr[i], parent: currentUrl })
-      await incrementTotalUrlsData();
       skippedOver++;
       toContinue = false;
     }

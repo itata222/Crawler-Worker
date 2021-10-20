@@ -140,4 +140,5 @@ module.exports = {
   incrementUrlsInCurrentLevelScannedData,
   getWorkDictData,
   incrementTotalUrlsData,
+  incrementDeathEndsData,
 };
