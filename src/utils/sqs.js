@@ -5,11 +5,11 @@ const sqs = new AWS.SQS({
   region: process.env.AWS_REGION,
 });
 
-const sendMessageToQueue = async ({ url, rootUrl, QueueUrl, parentUrl }) => {
+const sendMessageToQueue = async ({ url, workID, QueueUrl, parentUrl }) => {
   try {
     let MessageBody;
 
-    MessageBody = `${rootUrl}$${url}$${parentUrl}`;
+    MessageBody = `${workID}$${url}$${parentUrl}`;
     const { MessageId } = await sqs
       .sendMessage({
         QueueUrl,
@@ -23,14 +23,14 @@ const sendMessageToQueue = async ({ url, rootUrl, QueueUrl, parentUrl }) => {
   }
 };
 
-const pollMessageFromQueue = async ({ QueueName, rootUrl }) => {
+const pollMessageFromQueue = async ({ QueueName, workID }) => {
   try {
     const { QueueUrl } = await sqs.getQueueUrl({ QueueName }).promise();
     const { Messages } = await sqs
       .receiveMessage({
         QueueUrl,
         MaxNumberOfMessages: 1,
-        MessageAttributeNames: [`${rootUrl}$*`],
+        MessageAttributeNames: [`${workID}$*`],
         VisibilityTimeout: 30,
         WaitTimeSeconds: 10,
       })

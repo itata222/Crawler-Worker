@@ -1,11 +1,9 @@
 const redisClient = require("../db/redis");
 
-const isUrlExistInRedis = async ({ currentUrl, rootUrl, parentAddress }) => {
-  let isExist, response;
+const isUrlExistInRedis = async ({ currentUrl }) => {
   try {
-    response = await redisClient.keysAsync(`${rootUrl}$${currentUrl}[/]$*`);
-    response == null || response?.length === 0 ? (isExist = false) : (isExist = true);
-    return isExist;
+    const response = await redisClient.getAsync(`${currentUrl}`);
+    return response;
   } catch (e) {
     console.log(e);
     return e;
@@ -86,8 +84,17 @@ const incrementTotalUrlsData = async () => {
     return e;
   }
 };
-const saveUrlInRedis = async ({ parentAddress, myAddress, depth, rootUrl, position, childrenUrls }) => {
+const incrementDeathEndsData = async () => {
+  try {
+    const response = await redisClient.hincrbyAsync("levelData", "totalDeathEnds", 1);
+    return response;
+  } catch (e) {
+    return e;
+  }
+};
+const saveUrlInRedis = async ({ parentAddress, myAddress, depth, rootUrl, position, childrenUrls, workID }) => {
   let address = myAddress;
+  console.log(workID);
   try {
     if (myAddress != undefined && !myAddress.includes("http")) address = myAddress.substring(1);
     const childrenUrlsStr = JSON.stringify(childrenUrls);
@@ -98,11 +105,13 @@ const saveUrlInRedis = async ({ parentAddress, myAddress, depth, rootUrl, positi
       rootUrl,
       position,
       childrenUrlsStr,
+      workID,
     };
     const urlStr = JSON.stringify(urlObj);
 
-    await redisClient.setexAsync(`${rootUrl}$${address}$${parentAddress}`, 3600, urlStr);
+    await redisClient.setexAsync(`${address}`, 3600, urlStr);
   } catch (e) {
+    console.log(e);
     return e;
   }
 };

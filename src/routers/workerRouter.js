@@ -9,7 +9,6 @@ const {
   incrementUrlsInCurrentLevelScannedData,
   getWorkDictData,
   incrementTotalUrlsData,
-  addUrlsToCurrentLevelToScanData,
   addUrlsToNextLevelToScanData,
 } = require("../utils/redis");
 const { scrapeUrl } = require("../utils/scraper");
@@ -18,8 +17,8 @@ const router = new express.Router();
 const QueueName = "Crawler-Queue1";
 
 router.post("/crawl", async (req, res) => {
-  const { rootUrl, maxDepth, maxTotalPages } = await getWorkDictData();
-  console.log(maxDepth);
+  const { rootUrl, maxDepth, maxTotalPages, workID } = await getWorkDictData();
+  console.log(workID, "workID");
   let levelUrls = [],
     skippedOver = 0;
   while (true) {
@@ -29,7 +28,7 @@ router.post("/crawl", async (req, res) => {
     //--------------------extracting data--------------------
     console.log(0);
     const currentLevelData = await getCurrentLevelData();
-    const polledResponse = await pollMessageFromQueue({ QueueName, rootUrl });
+    const polledResponse = await pollMessageFromQueue({ QueueName, workID });
 
     console.log(1);
     //--------------------polling tests------------------------------
@@ -42,6 +41,7 @@ router.post("/crawl", async (req, res) => {
     const QueueUrl = polledResponse.QueueUrl;
     const currentUrl = Messages[0].Body.split("$")[1];
     const parentUrl = Messages[0].Body.split("$")[2];
+    await deleteMessagesFromQueue({ Messages, QueueUrl });
 
     console.log(
       3,
@@ -49,21 +49,32 @@ router.post("/crawl", async (req, res) => {
       parseInt(currentLevelData.urlsInCurrentLevelToScan),
       parseInt(currentLevelData.currentLevel)
     );
-    //---------------------check if the whole work has need to be done------------------
+    //---------------------check if the whole work has done or level completed------------------
     if (
       parseInt(currentLevelData.totalUrls) >= maxTotalPages ||
-      (maxDepth === parseInt(currentLevelData.currentLevel) &&
-        parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1 === parseInt(currentLevelData.urlsInCurrentLevelToScan))
+      (parseInt(maxDepth) === parseInt(currentLevelData.currentLevel) &&
+        parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + parseInt(currentLevelData.totalDeathEnds) + 1 ===
+          parseInt(currentLevelData.urlsInCurrentLevelToScan))
     ) {
       await setWorkAsDoneInRedis();
       break;
     }
 
+    if (parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) === parseInt(currentLevelData.urlsInCurrentLevelToScan)) {
+      await incrementLevelData();
+      continue;
+    }
+
     console.log(4);
     //----------------------general tests------------------------
-    const isExist = await isUrlExistInRedis({ currentUrl, rootUrl });
-    if (isExist) {
-      await deleteMessagesFromQueue({ Messages, QueueUrl });
+    const urlFromRedis = await isUrlExistInRedis({ currentUrl, workID });
+    if (urlFromRedis != null) {
+      const responseObj = JSON.parse(urlFromRedis);
+      console.log("exist", responseObj);
+      if (responseObj.workID === workID) {
+        await incrementDeathEndsData();
+      }
+      //levelUrls.push({ url: childrenUrlsArr[i], parent: currentUrl })
       await incrementTotalUrlsData();
       skippedOver++;
       toContinue = false;
@@ -72,19 +83,21 @@ router.post("/crawl", async (req, res) => {
     console.log(5);
     if (toContinue) {
       //-----------------------scrape-------------------------
-      const childrenUrls = await scrapeUrl(encodeURI(currentUrl, rootUrl));
-      if (childrenUrls == undefined) continue;
+      const childrenUrls = await scrapeUrl(encodeURI(currentUrl));
+      if (childrenUrls == undefined) {
+        await incrementUrlsInCurrentLevelScannedData();
+        continue;
+      }
       childrenUrlsLength = childrenUrls.length;
       childrenUrlsArr = [...childrenUrls];
-      for (let i = 0; i < childrenUrlsLength; i++) levelUrls.push(childrenUrlsArr[i]);
+      for (let i = 0; i < childrenUrlsLength; i++) levelUrls.push({ url: childrenUrlsArr[i], parent: currentUrl });
 
-      console.log(6, parseInt(currentLevelData.totalUrls));
+      console.log(6, "totalUrls", parseInt(currentLevelData.totalUrls));
       //----------------------update Redis after scrape data----------------------
       const parentAddress = rootUrl === currentUrl ? null : parentUrl;
       const position = rootUrl === currentUrl ? 0 : parseInt(currentLevelData.totalUrls) - skippedOver;
       await incrementTotalUrlsData();
       await addUrlsToNextLevelToScanData(childrenUrlsLength);
-      await deleteMessagesFromQueue({ Messages, QueueUrl });
       await saveUrlInRedis({
         parentAddress,
         myAddress: currentUrl,
@@ -92,28 +105,44 @@ router.post("/crawl", async (req, res) => {
         rootUrl,
         position,
         childrenUrls,
+        workID,
       });
 
       console.log(7);
       //----------------------update SQS---------------------------
       await deleteMessagesFromQueue({ Messages, QueueUrl });
     }
-    //----------------------check if the level done-------------------
-    if (parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1 === parseInt(currentLevelData.urlsInCurrentLevelToScan)) {
+    //----------------------check if the work or level done-------------------
+    console.log(
+      "last check",
+      parseInt(maxDepth),
+      parseInt(currentLevelData.currentLevel),
+      parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1,
+      parseInt(currentLevelData.urlsInCurrentLevelToScan)
+    );
+    if (
+      parseInt(currentLevelData.totalUrls) === maxTotalPages ||
+      (parseInt(maxDepth) === parseInt(currentLevelData.currentLevel) &&
+        parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1 + parseInt(currentLevelData.totalDeathEnds) ===
+          parseInt(currentLevelData.urlsInCurrentLevelToScan))
+    ) {
+      await setWorkAsDoneInRedis();
+      break;
+    } else if (
+      parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + parseInt(currentLevelData.totalDeathEnds) + 1 ===
+      parseInt(currentLevelData.urlsInCurrentLevelToScan)
+    ) {
       await incrementLevelData();
-      if (parseInt(currentLevelData.urlsInCurrentLevelToScan) + childrenUrlsLength - 1 === 0) {
-        await setWorkAsDoneInRedis();
-        break;
-      } else {
-        console.log("level completed so we need to wait its sends all urls to queuqe in sqs");
-        for (let i = 0; i < levelUrls.length; i++)
-          await sendMessageToQueue({
-            url: levelUrls[i],
-            rootUrl,
-            QueueUrl,
-            parentUrl: currentUrl,
-          });
-      }
+      console.log("level completed so we need to wait its sends all urls to queuqe in sqs");
+      for (let i = 0; i < levelUrls.length; i++)
+        sendMessageToQueue({
+          url: levelUrls[i].url,
+          rootUrl,
+          QueueUrl,
+          parentUrl: levelUrls[i].parent,
+          workID,
+        });
+
       levelUrls = [];
       console.log(9, "level has done");
     }

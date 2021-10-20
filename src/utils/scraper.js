@@ -13,7 +13,6 @@ const scrapeUrl = async (url) => {
     });
     return links;
   } catch (err) {
-    console.log("scraper error", err.response);
     return;
   }
 };
