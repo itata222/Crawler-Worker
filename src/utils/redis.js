@@ -9,84 +9,85 @@ const isUrlExistInRedis = async ({ currentUrl }) => {
     return e;
   }
 };
-const getCurrentLevelData = async () => {
+const getCurrentLevelData = async (workID) => {
   try {
-    const response = await redisClient.hgetallAsync("levelData");
+    const response = await redisClient.hgetallAsync(`levelData-${workID}`);
     return response;
   } catch (e) {
     console.log(e);
     return e;
   }
 };
-const getWorkDictData = async () => {
+const getWorkDictData = async (workID) => {
   try {
-    const response = await redisClient.hgetallAsync("workDict");
+    const response = await redisClient.hgetallAsync(`workDict-${workID}`);
     return response;
   } catch (e) {
     console.log(e);
     return e;
   }
 };
-const incrementUrlsInCurrentLevelScannedData = async () => {
+const incrementUrlsInCurrentLevelScannedData = async (workID) => {
   try {
-    const response = await redisClient.hincrbyAsync("levelData", "urlsInCurrentLevelAlreadyScanned", 1);
+    const response = await redisClient.hincrbyAsync(`levelData-${workID}`, "urlsInCurrentLevelAlreadyScanned", 1);
     return response;
   } catch (e) {
     return e;
   }
 };
-const addUrlsToCurrentLevelToScanData = async (childsUrlLength) => {
+const addUrlsToCurrentLevelToScanData = async (childsUrlLength, workID) => {
   try {
-    const levelData = await redisClient.hgetallAsync("levelData");
+    const levelData = await redisClient.hgetallAsync(`levelData-${workID}`);
     const childsSum = parseInt(levelData.urlsInCurrentLevelToScan) + childsUrlLength;
-    const response = await redisClient.hsetAsync("levelData", "urlsInCurrentLevelToScan", childsSum);
+    const response = await redisClient.hsetAsync(`levelData-${workID}`, "urlsInCurrentLevelToScan", childsSum);
     return response;
   } catch (e) {
     return e;
   }
 };
-const addUrlsToNextLevelToScanData = async (childsUrlLength) => {
+const addUrlsToNextLevelToScanData = async (childsUrlLength, workID) => {
   try {
-    const levelData = await redisClient.hgetallAsync("levelData");
+    const levelData = await redisClient.hgetallAsync(`levelData-${workID}`);
     const childsSum = parseInt(levelData.urlsInNextLevelToScan) + childsUrlLength;
-    const response = await redisClient.hsetAsync("levelData", "urlsInNextLevelToScan", childsSum);
+    const response = await redisClient.hsetAsync(`levelData-${workID}`, "urlsInNextLevelToScan", childsSum);
     return response;
   } catch (e) {
     return e;
   }
 };
-const setNewUrlsToCurrentLevelToScanData = async () => {
+const setNewUrlsToCurrentLevelToScanData = async (workID) => {
   try {
-    const response = await redisClient.hsetAsync("levelData", "urlsInCurrentLevelToScan", 0);
+    const response = await redisClient.hsetAsync(`levelData-${workID}`, "urlsInCurrentLevelToScan", 0);
     return response;
   } catch (e) {
     return e;
   }
 };
-const incrementLevelData = async () => {
+const incrementLevelData = async (workID) => {
   try {
-    const levelData = await redisClient.hgetallAsync("levelData");
-    await redisClient.hincrbyAsync("levelData", "currentLevel", 1);
-    await redisClient.hsetAsync("levelData", "urlsInCurrentLevelToScan", parseInt(levelData.urlsInNextLevelToScan));
-    await redisClient.hsetAsync("levelData", "urlsInCurrentLevelAlreadyScanned", 0);
-    await redisClient.hsetAsync("levelData", "urlsInNextLevelToScan", 0);
-    const updatedStats = await redisClient.hgetallAsync("levelData");
+    const levelData = await redisClient.hgetallAsync(`levelData-${workID}`);
+    await redisClient.hincrbyAsync(`levelData-${workID}`, "currentLevel", 1);
+    await redisClient.hsetAsync(`levelData-${workID}`, "urlsInCurrentLevelToScan", parseInt(levelData.urlsInNextLevelToScan));
+    await redisClient.hsetAsync(`levelData-${workID}`, "urlsInCurrentLevelAlreadyScanned", 0);
+    await redisClient.hsetAsync(`levelData-${workID}`, "currentLevelDeathEnds", 0);
+    await redisClient.hsetAsync(`levelData-${workID}`, "urlsInNextLevelToScan", 0);
+    const updatedStats = await redisClient.hgetallAsync(`levelData-${workID}`);
     return updatedStats;
   } catch (e) {
     return e;
   }
 };
-const incrementTotalUrlsData = async () => {
+const incrementTotalUrlsData = async (workID) => {
   try {
-    const response = await redisClient.hincrbyAsync("levelData", "totalUrls", 1);
+    const response = await redisClient.hincrbyAsync(`levelData-${workID}`, "totalUrls", 1);
     return response;
   } catch (e) {
     return e;
   }
 };
-const incrementDeathEndsData = async () => {
+const incrementDeathEndsData = async (workID) => {
   try {
-    const response = await redisClient.hincrbyAsync("levelData", "totalDeathEnds", 1);
+    const response = await redisClient.hincrbyAsync(`levelData-${workID}`, "currentLevelDeathEnds", 1);
     return response;
   } catch (e) {
     return e;
@@ -94,7 +95,6 @@ const incrementDeathEndsData = async () => {
 };
 const saveUrlInRedis = async ({ parentAddress, myAddress, depth, rootUrl, position, childrenUrls, workID }) => {
   let address = myAddress;
-  console.log(workID);
   try {
     if (myAddress != undefined && !myAddress.includes("http")) address = myAddress.substring(1);
     const childrenUrlsStr = JSON.stringify(childrenUrls);
@@ -116,11 +116,12 @@ const saveUrlInRedis = async ({ parentAddress, myAddress, depth, rootUrl, positi
   }
 };
 
-const setWorkAsDoneInRedis = async () => {
+const setWorkAsDoneInRedis = async (workID) => {
+  console.log("work doneeeee");
   try {
-    await redisClient.hsetAsync("workDict", "finished", "true");
+    await redisClient.hsetAsync(`workDict-${workID}`, "finished", "true");
 
-    const workDict = await redisClient.hgetallAsync("workDict");
+    const workDict = await redisClient.hgetallAsync(`workDict-${workID}`);
 
     return workDict;
   } catch (e) {

@@ -2,7 +2,7 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 
 const scrapeUrl = async (url) => {
-  console.log("url", url);
+  console.log("not existing - url", url);
   try {
     const urlResponse = await axios.get(url);
     const $ = cheerio.load(urlResponse.data);
@@ -19,8 +19,10 @@ const scrapeUrl = async (url) => {
 
 const getFullUrl = (url) => {
   try {
+    const urlObj = new URL(url);
     if (url.includes("http")) {
-      return url;
+      if (urlObj.protocol === "https:") urlObj.protocol = "http:";
+      return urlObj.href;
     } else {
       return `http://${url}`;
     }
