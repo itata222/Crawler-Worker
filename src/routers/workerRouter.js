@@ -2,13 +2,11 @@ const redisClient = require("../db/redis");
 const express = require("express");
 const { sendMessageToQueue, pollMessageFromQueue, deleteMessagesFromQueue } = require("../utils/sqs");
 const {
-  setWorkAsDoneInRedis,
   isUrlExistInRedis,
   saveUrlInRedis,
   getCurrentLevelData,
   incrementLevelData,
   incrementUrlsInCurrentLevelScannedData,
-  getWorkDictData,
   incrementTotalUrlsData,
   addUrlsToNextLevelToScanData,
   incrementDeathEndsData,
@@ -19,9 +17,8 @@ const QueueName = process.env.QUEUE_NAME;
 const router = new express.Router();
 
 router.post("/crawl", async (req, res) => {
-  const workID = req.query.workID;
+  const { workID, rootUrl } = req.query;
   res.send();
-  const { rootUrl, maxDepth, maxTotalPages } = await getWorkDictData(workID);
   console.log(workID, "workID");
   let levelUrls = [];
   while (true) {
@@ -39,11 +36,10 @@ router.post("/crawl", async (req, res) => {
     //--------------------extract data after verifying polling request succeded ---------------
     const Messages = polledResponse.Messages;
     const QueueUrl = polledResponse.QueueUrl;
+
     const currentUrl = Messages[0].Body.split("$")[1];
     const parentUrl = Messages[0].Body.split("$")[2];
-    await deleteMessagesFromQueue({ Messages, QueueUrl });
 
-    console.log(4);
     //----------------------general tests------------------------
     const urlFromRedis = await isUrlExistInRedis({ currentUrl });
     if (urlFromRedis != null) {
@@ -81,7 +77,7 @@ router.post("/crawl", async (req, res) => {
       const position = rootUrl === currentUrl ? 0 : parseInt(currentLevelData.totalUrls);
       await incrementTotalUrlsData(workID);
       await addUrlsToNextLevelToScanData(childrenUrlsLength, workID);
-      await saveUrlInRedis({
+      saveUrlInRedis({
         parentAddress,
         myAddress: currentUrl,
         depth: parseInt(currentLevelData.currentLevel),
@@ -90,30 +86,14 @@ router.post("/crawl", async (req, res) => {
         childrenUrls,
         workID: parseInt(workID),
       });
-
-      //----------------------update SQS---------------------------
-      await deleteMessagesFromQueue({ Messages, QueueUrl });
     }
+    //----------------------update SQS---------------------------
+    deleteMessagesFromQueue({ Messages, QueueUrl });
     //------------------------get recent data and logged it---------------
     currentLevelData = await getCurrentLevelData(workID);
-    console.log(
-      6,
-      parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1,
-      parseInt(currentLevelData.currentLevelDeathEnds),
-      parseInt(currentLevelData.urlsInCurrentLevelToScan),
-      parseInt(currentLevelData.totalUrls),
-      parseInt(maxTotalPages)
-    );
     //----------------------check if the work or level done-------------------
+
     if (
-      parseInt(currentLevelData.totalUrls) === parseInt(maxTotalPages) ||
-      (parseInt(maxDepth) === parseInt(currentLevelData.currentLevel) &&
-        parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + 1 + parseInt(currentLevelData.currentLevelDeathEnds) >=
-          parseInt(currentLevelData.urlsInCurrentLevelToScan))
-    ) {
-      await setWorkAsDoneInRedis(workID);
-      break;
-    } else if (
       parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + parseInt(currentLevelData.currentLevelDeathEnds) + 1 >=
       parseInt(currentLevelData.urlsInCurrentLevelToScan)
     ) {
@@ -131,7 +111,6 @@ router.post("/crawl", async (req, res) => {
       console.log(9, "level has done");
     }
     await incrementUrlsInCurrentLevelScannedData(workID);
-    console.log(10, "iteration done");
   }
 });
 
