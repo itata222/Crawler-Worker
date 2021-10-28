@@ -5,11 +5,11 @@ const sqs = new AWS.SQS({
   region: process.env.AWS_REGION,
 });
 
-const sendMessageToQueue = async ({ url, workID, QueueUrl, parentUrl }) => {
+const sendMessageToQueue = async ({ url, workID, QueueUrl, parentUrl, parentPosition }) => {
   try {
     let MessageBody;
 
-    MessageBody = `${workID}$${url}$${parentUrl}`;
+    MessageBody = `${workID}$${url}$${parentUrl}$${parentPosition}`;
     const { MessageId } = await sqs
       .sendMessage({
         QueueUrl,
@@ -19,7 +19,7 @@ const sendMessageToQueue = async ({ url, workID, QueueUrl, parentUrl }) => {
 
     return MessageId;
   } catch (err) {
-    console.log("111", err);
+    console.log("111", err.message);
   }
 };
 
@@ -29,7 +29,7 @@ const pollMessageFromQueue = async ({ QueueName, workID }) => {
     const { Messages } = await sqs
       .receiveMessage({
         QueueUrl,
-        MaxNumberOfMessages: 1,
+        MaxNumberOfMessages: 10,
         MessageAttributeNames: [`${workID}$*`],
         VisibilityTimeout: 30,
         WaitTimeSeconds: 10,
