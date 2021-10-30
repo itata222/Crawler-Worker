@@ -23,10 +23,9 @@ const router = new express.Router();
 
 router.post("/crawl", async (req, res) => {
   res.send();
-  const { workID, rootUrl, maxPages } = req.query;
+  const { workID } = req.query;
   while (true) {
-    let toContinue = true,
-      nextLevelUrls = [];
+    let toContinue = true;
     const polledResponse = await pollMessageFromQueue({ QueueName, workID });
 
     if (polledResponse == undefined) break;
@@ -35,12 +34,12 @@ router.post("/crawl", async (req, res) => {
     const Messages = polledResponse.Messages;
     const QueueUrl = polledResponse.QueueUrl;
 
-    for (let i = 0; i < Messages.length; i++) {
+    let currentLevelData = await getCurrentLevelData(workID);
+    for (let i = 0; i < Messages.length && parseInt(currentLevelData.remainingSlots) - parseInt(currentLevelData.currentLevelDeathEnds) >= 0; i++) {
+      nextLevelUrls = [];
       const currentUrl = Messages[i].Body.split("$")[1];
       const parentUrl = Messages[i].Body.split("$")[2];
       const parentPosition = Messages[i].Body.split("$")[3];
-      console.log(parentPosition, "parentPosition");
-      let currentLevelData = await getCurrentLevelData(workID);
 
       const urlFromRedis = await isUrlExistInRedis({ currentUrl });
       if (urlFromRedis != null) {
@@ -52,9 +51,11 @@ router.post("/crawl", async (req, res) => {
             ? JSON.parse(responseObj.childrenUrlsStr)
             : responseObj.childrenUrlsStr;
           responseObj.workID = parseInt(workID);
-          responseObj.childrenUrlsStr = JSON.stringify(existingKeyChildrens);
-          saveUrlInRedis(responseObj);
+          responseObj.childrenUrls = existingKeyChildrens;
+          await saveUrlInRedis(responseObj);
           await incrementTotalUrlsData(workID);
+          const childrensLength = existingKeyChildrens == undefined ? 0 : existingKeyChildrens.length;
+          await addUrlsToNextLevelToScanData(childrensLength, workID);
 
           for (let i = 0; i < existingKeyChildrens.length; i++) {
             if (parentUrl === "null" || currentUrl !== existingKeyChildrens[i])
@@ -65,33 +66,36 @@ router.post("/crawl", async (req, res) => {
                 position: `${parentPosition}-${i}`,
               });
           }
+          const nextLevelUrlsString = JSON.stringify(nextLevelUrls);
+          await redisClient.lpushAsync(`tree:${workID}`, nextLevelUrlsString);
           await decreaseRemainnigSlots(workID);
         }
         toContinue = false;
+        await incrementUrlsInCurrentLevelScannedData(workID);
       }
 
       if (toContinue) {
         const childrenUrls = await scrapeUrl(encodeURI(currentUrl));
+        let hasChild = true;
+        if (childrenUrls == undefined) hasChild = false;
+        if (hasChild)
+          for (let i = 0; i < childrenUrls.length; i++)
+            if (parentUrl === "null" || currentUrl !== childrenUrls[i])
+              nextLevelUrls.push({
+                myAddress: childrenUrls[i],
+                depth: parseInt(currentLevelData.currentLevel) + 1,
+                parentAddress: currentUrl,
+                position: `${parentPosition}-${i}`,
+              });
+
         await incrementUrlsInCurrentLevelScannedData(workID);
-        if (childrenUrls == undefined) {
-          continue;
-        }
-        for (let i = 0; i < childrenUrls.length; i++) {
-          if (parentUrl === "null" || currentUrl !== childrenUrls[i])
-            nextLevelUrls.push({
-              myAddress: childrenUrls[i],
-              depth: parseInt(currentLevelData.currentLevel) + 1,
-              parentAddress: currentUrl,
-              position: `${parentPosition}-${i}`,
-            });
-        }
         await addUrlsToNextLevelToScanData(nextLevelUrls.length, workID);
         await decreaseRemainnigSlots(workID);
         await incrementTotalUrlsData(workID);
         const currentUrlObj = {
           parentAddress: parentUrl,
           myAddress: currentUrl,
-          childrenUrls,
+          childrenUrls: childrenUrls == undefined ? [] : childrenUrls,
           workID: parseInt(workID),
         };
         const nextLevelUrlsString = JSON.stringify(nextLevelUrls);
@@ -103,12 +107,16 @@ router.post("/crawl", async (req, res) => {
     await deleteMessagesFromQueue({ Messages, QueueUrl });
 
     currentLevelData = await getCurrentLevelData(workID);
-    console.log(parseInt(currentLevelData.remainingSlots) - parseInt(currentLevelData.currentLevelDeathEnds));
     if (parseInt(currentLevelData.remainingSlots) - parseInt(currentLevelData.currentLevelDeathEnds) <= 0) break;
     else if (
-      parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + parseInt(currentLevelData.currentLevelDeathEnds) + 1 >=
+      parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned) + parseInt(currentLevelData.currentLevelDeathEnds) >=
       parseInt(currentLevelData.urlsInCurrentLevelToScan)
     ) {
+      console.log(
+        parseInt(currentLevelData.urlsInCurrentLevelAlreadyScanned),
+        parseInt(currentLevelData.currentLevelDeathEnds) + 1,
+        parseInt(currentLevelData.urlsInCurrentLevelToScan)
+      );
       await setFirstPositionInNextLevel(workID, currentLevelData.urlsInNextLevelToScan);
       const tree = await getLatestDataFromRedis({ workID });
       const sortedLevelUrls = tree.sort(function (a, b) {
@@ -125,15 +133,9 @@ router.post("/crawl", async (req, res) => {
         }
         return 0;
       });
-      for (let i = 0; i < parseInt(currentLevelData.urlsInCurrentLevelToScan); i++) sortedLevelUrls.shift();
-      await incrementLevelData(workID);
-      console.log(
-        "currentLevelData.remainingSlots",
-        parseInt(currentLevelData.remainingSlots),
-        sortedLevelUrls.length,
-        parseInt(currentLevelData.urlsInNextLevelToScan.length)
-      );
+      for (let i = 0; i < parseInt(currentLevelData.totalUrls); i++) sortedLevelUrls.shift();
       for (let i = 0; i < Math.min(parseInt(currentLevelData.remainingSlots), sortedLevelUrls.length); i++) {
+        console.log("sortedLevelUrls[i].myAddress", i, sortedLevelUrls[i].myAddress);
         sendMessageToQueue({
           url: sortedLevelUrls[i].myAddress,
           parentPosition: sortedLevelUrls[i].position,
@@ -142,10 +144,9 @@ router.post("/crawl", async (req, res) => {
           workID: parseInt(workID),
         });
       }
-      nextLevelUrls = [];
+      await incrementLevelData(workID);
       console.log(9, "level ended");
     }
-    await incrementUrlsInCurrentLevelScannedData(workID);
   }
 });
 

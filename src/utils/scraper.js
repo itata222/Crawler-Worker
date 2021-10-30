@@ -6,12 +6,12 @@ const scrapeUrl = async (url) => {
   try {
     const urlResponse = await axios.get(url);
     const $ = cheerio.load(urlResponse.data);
-    const links = [];
+    const links = new Set();
     $("a").each((i, el) => {
       const link = getFullUrl($(el).attr("href"));
-      if (isLinkValid(link)) links.push(link);
+      if (isLinkValid(link)) links.add(link);
     });
-    return links;
+    return Array.from(links);
   } catch (err) {
     return;
   }

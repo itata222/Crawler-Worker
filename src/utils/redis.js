@@ -61,7 +61,6 @@ const addUrlsToNextLevelToScanData = async (childsUrlLength, workID) => {
   try {
     const levelData = await redisClient.hgetallAsync(`levelData-${workID}`);
     const childsSum = parseInt(levelData.urlsInNextLevelToScan) + childsUrlLength;
-    console.log(childsSum, "childsSum");
     await redisClient.hsetAsync(`levelData-${workID}`, "urlsInNextLevelToScan", childsSum);
     return childsSum;
   } catch (e) {
