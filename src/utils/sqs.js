@@ -36,7 +36,10 @@ const pollMessageFromQueue = async ({ QueueName, workID }) => {
       })
       .promise();
 
-    return { QueueUrl, Messages };
+    if (Messages != null) {
+      await deleteMessagesFromQueue({ Messages, QueueUrl });
+    }
+    return { QueueUrl, Messages: Messages || [] };
   } catch (e) {
     return undefined;
   }
@@ -57,8 +60,20 @@ const deleteMessagesFromQueue = async ({ Messages, QueueUrl }) => {
   }
 };
 
+const deleteQueue = async ({ QueueUrl }) => {
+  let isQueueDeleted;
+  try {
+    if (QueueUrl) isQueueDeleted = await sqs.deleteQueue({ QueueUrl }).promise();
+    console.log("isQueueDeleted", isQueueDeleted);
+  } catch (err) {
+    next(err);
+    console.log("112", err);
+  }
+};
+
 module.exports = {
   sendMessageToQueue,
   pollMessageFromQueue,
   deleteMessagesFromQueue,
+  deleteQueue,
 };

@@ -36,15 +36,29 @@ const incrementUrlsInCurrentLevelScannedData = async (workID) => {
 };
 const getLatestDataFromRedis = async ({ workID }) => {
   try {
-    // const allWorkNodes = await getAllUrlsInRedis({ workID });
-    // console.log("allWorkNodes", allWorkNodes.length);
     const treeArr = [];
     const tree = await redisClient.lrangeAsync(`tree:${workID}`, 0, -1);
     tree.forEach((element) => {
       const el = JSON.parse(element);
-      treeArr.push(...el);
+      for (let item of el) {
+        if (item != null) treeArr.push(item);
+      }
     });
-    return treeArr;
+    const sortedTreeArr = treeArr.sort(function (a, b) {
+      if (typeof a.position !== "number") a.position = `${a.position}`;
+      if (typeof b.position !== "number") b.position = `${b.position}`;
+      const aPos = a.position.split("-");
+      const bPos = b.position.split("-");
+      for (let i = 0; i < aPos.length; i++) {
+        if (aPos.length < bPos.length) return -1;
+        if (aPos.length > bPos.length) return 1;
+        if (parseInt(aPos[i]) < parseInt(bPos[i])) return -1;
+        if (parseInt(aPos[i]) > parseInt(bPos[i])) return 1;
+        continue;
+      }
+      return 0;
+    });
+    return sortedTreeArr;
   } catch (e) {
     console.log("e", e);
   }
@@ -66,11 +80,6 @@ const addUrlsToNextLevelToScanData = async (childsUrlLength, workID) => {
   } catch (e) {
     return e;
   }
-};
-const insertUrlsToNextLevel = async (arrOfUrls, workID) => {
-  const urlsASstrings = JSON.stringify(arrOfUrls);
-  const currentLevelData = await redisClient.hgetallAsync(`levelData-${workID}`);
-  await redisClient.hsetAsync(`levelData-${workID}`, "nextLevelUrls", currentLevelData.nextLevelUrls + urlsASstrings);
 };
 const incrementTotalUrlsData = async (workID) => {
   try {
@@ -103,13 +112,6 @@ const incrementLevelData = async (workID) => {
     return e;
   }
 };
-const setFirstPositionInNextLevel = async (workID, nextPosition) => {
-  try {
-    await redisClient.hsetAsync(`levelData-${workID}`, "firstPositionInNextLevel", nextPosition);
-  } catch (e) {
-    return e;
-  }
-};
 const saveUrlInRedis = async ({ parentAddress, myAddress, childrenUrls, workID }) => {
   let address = myAddress;
   try {
@@ -137,10 +139,8 @@ module.exports = {
   decreaseRemainnigSlots,
   getCurrentLevelData,
   saveUrlInRedis,
-  insertUrlsToNextLevel,
   incrementUrlsInCurrentLevelScannedData,
   incrementTotalUrlsData,
   IsJsonString,
-  setFirstPositionInNextLevel,
   incrementDeathEndsData,
 };
