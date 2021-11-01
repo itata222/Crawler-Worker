@@ -63,6 +63,10 @@ const getLatestDataFromRedis = async ({ workID }) => {
     console.log("e", e);
   }
 };
+const saveScrapedUrlChildrenInTreeList = async (nextLevelUrls, workID) => {
+  const nextLevelUrlsString = JSON.stringify(nextLevelUrls);
+  await redisClient.lpushAsync(`tree:${workID}`, nextLevelUrlsString);
+};
 const decreaseRemainnigSlots = async (workID) => {
   try {
     const response = await redisClient.hincrbyAsync(`levelData-${workID}`, "remainingSlots", -1);
@@ -143,4 +147,5 @@ module.exports = {
   incrementTotalUrlsData,
   IsJsonString,
   incrementDeathEndsData,
+  saveScrapedUrlChildrenInTreeList,
 };
