@@ -23,57 +23,44 @@ const sendMessageToQueue = async ({ url, workID, QueueUrl, parentUrl, parentPosi
   }
 };
 
-const pollMessageFromQueue = async ({ QueueName, workID }) => {
+const pollMessageFromQueue = async ({ QueueName }) => {
   try {
     const { QueueUrl } = await sqs.getQueueUrl({ QueueName }).promise();
     const { Messages } = await sqs
       .receiveMessage({
         QueueUrl,
         MaxNumberOfMessages: 10,
-        MessageAttributeNames: [`${workID}$*`],
         VisibilityTimeout: 30,
         WaitTimeSeconds: 10,
       })
       .promise();
 
-    if (Messages != null) {
-      await deleteMessagesFromQueue({ Messages, QueueUrl });
-    }
+    console.log("Messages", Messages);
+    if (Messages != null) await deleteMessagesFromQueue({ Messages, QueueUrl });
+
     return { QueueUrl, Messages: Messages || [] };
   } catch (e) {
-    return undefined;
+    console.log(e, "e");
+    // console.log("Queue does not exist");
   }
 };
 
 const deleteMessagesFromQueue = async ({ Messages, QueueUrl }) => {
-  if (Messages) {
-    const messagesDeleteFuncs = Messages.map(async (message) => {
-      return sqs
-        .deleteMessage({
-          QueueUrl,
-          ReceiptHandle: message.ReceiptHandle,
-        })
-        .promise();
-    });
-
-    await Promise.allSettled(messagesDeleteFuncs).then();
-  }
-};
-
-const deleteQueue = async ({ QueueUrl }) => {
-  let isQueueDeleted;
-  try {
-    if (QueueUrl) isQueueDeleted = await sqs.deleteQueue({ QueueUrl }).promise();
-    console.log("isQueueDeleted", isQueueDeleted);
-  } catch (err) {
-    next(err);
-    console.log("112", err);
-  }
+  const messagesDeleteFuncs = Messages.map(async (message) => {
+    return sqs
+      .deleteMessage({
+        QueueUrl,
+        ReceiptHandle: message.ReceiptHandle,
+      })
+      .promise();
+  });
+  await Promise.allSettled(messagesDeleteFuncs)
+    .then()
+    .catch((e) => console.log(e));
 };
 
 module.exports = {
   sendMessageToQueue,
   pollMessageFromQueue,
   deleteMessagesFromQueue,
-  deleteQueue,
 };

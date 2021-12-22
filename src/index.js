@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const workerRouter = require("./routers/workerRouter");
+const startWorker = require("./utils/workerMissions");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -12,4 +13,7 @@ app.use(workerRouter);
 
 app.listen(port, () => {
   console.log("worker service on port:", port);
+  startWorker()
+    .then(() => console.log("Worker runs and already finished 1 iteration"))
+    .catch(() => console.log("Error occured"));
 });
